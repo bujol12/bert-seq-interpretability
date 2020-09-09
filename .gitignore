@@ -1,0 +1,13 @@
+models/
+*.ipynb
+
+*.txt
+mltagger/
+transformers/
+
+*.out
+data/
+glue_data/
+*.tsv
+*.0
+*.log
