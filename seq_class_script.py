@@ -45,7 +45,7 @@ from utils.arguments import (
     ModelArguments,
     parse_config,
 )
-import utils.model as custom_model
+from utils.model import SeqClassModel
 
 logging.basicConfig(level=logging.INFO)
 logging.basicConfig(
@@ -77,19 +77,24 @@ if __name__ == "__main__":
     set_seed(config_dict["seed"])
 
     labels = get_labels(data_args.labels)
+    # ensure positive label has index == 1
+    idx_pos = min(
+        [i for i, val in enumerate(labels) if val == data_args.positive_label]
+    )
+    labels[idx_pos], labels[1] = labels[1], labels[idx_pos]
+
     label_map: Dict[int, str] = {i: label for i, label in enumerate(labels)}
-    num_labels = len(labels)
 
     config = AutoConfig.from_pretrained(
         config_dict["model_name"],
-        num_labels=num_labels,
         id2label=label_map,
         label2id={label: i for i, label in enumerate(labels)},
         output_hidden_states=True,
         output_attentions=True,
     )
+
     tokenizer = AutoTokenizer.from_pretrained(config_dict["model_name"],)
-    model_raw = custom_model.SeqClassModel(config_dict=config_dict, model_config=config)
+    model_raw = SeqClassModel(params_dict=config_dict, model_config=config)
 
     data_config = dict(
         data_dir=data_args.data_dir,
@@ -127,7 +132,6 @@ if __name__ == "__main__":
             )
         ),
         gradient_accumulation_steps=config_dict["gradient_accumulation_steps"],
-        # enable_early_stopping=config_dict["enable_early_stopping"], # as in roberta paper - doesn't work in current transformers version :(
         learning_rate=config_dict["learning_rate"],  # as in roberta paper
         weight_decay=config_dict["weight_decay"],  ## as in roberta paper
         seed=config_dict["seed"],
@@ -153,7 +157,7 @@ if __name__ == "__main__":
     model = model_raw
     collator = MaskedDataCollator(
         tokenizer=tokenizer,
-        do_mask=config_dict["do_mask"],
+        do_mask=config_dict["do_mask_words"],
         mask_prob=config_dict["mask_prob"],
     )
     # Initialize our Trainer
@@ -168,28 +172,29 @@ if __name__ == "__main__":
 
     # Training
     if training_args.do_train:
-        trainer.train(
-            model_path=model_args.model_name_or_path
-            if os.path.isdir(model_args.model_name_or_path)
-            else None
-        )
+        trainer.train()
         trainer.save_model()
         # For convenience, we also re-save the tokenizer to the same directory,
         # so that you can share your model easily on huggingface.co/models =)
         if trainer.is_world_master():
-            tokenizer.save_pretrained(training_args.output_dir)
+            tokenizer.save_pretrained(output_dir)
 
     # Evaluate Each Checkpoints
     dev_results = {}
     test_results = {}
     checkpoints_list = trainer._sorted_checkpoints()
 
+    cnt = 0
+    max_dev_f1 = 0.0
+    max_f1_checkpoint_name = None
+    CNT_LIMIT = 5
+
     for checkpoint_name in checkpoints_list:
         path = (
             checkpoint_name  # os.path.join(training_args.output_dir, checkpoint_name)
         )
-        model_new = AutoModelForSequenceClassification.from_pretrained(
-            path, from_tf=bool(".ckpt" in config_dict["model_name"]), config=config,
+        model_new = SeqClassModel.from_pretrained(
+            path, params_dict=config_dict, config=config,
         )
         new_trainer = Trainer(
             model=model_new,
@@ -198,6 +203,16 @@ if __name__ == "__main__":
             compute_metrics=compute_seq_classification_metrics,
         )
         dev_results[checkpoint_name] = new_trainer.evaluate()
+        curr_dev_f1 = dev_results[checkpoint_name]["eval_f1"]
+
+        if curr_dev_f1 > max_dev_f1:
+            max_f1_checkpoint_name = checkpoint_name
+            max_dev_f1 = curr_dev_f1
+            cnt = 0
+        else:
+            cnt += 1
+            if cnt > CNT_LIMIT:
+                break
 
         eval_trainer = Trainer(
             model=model_new,
@@ -208,7 +223,7 @@ if __name__ == "__main__":
 
         test_results[checkpoint_name] = eval_trainer.evaluate()
 
-    eval_results_path = os.path.join(training_args.output_dir, "eval_results.txt")
+    eval_results_path = os.path.join(output_dir, "eval_results.txt")
 
     with open(eval_results_path, "w") as writer:
         writer.write("[dev]\n")
@@ -218,3 +233,22 @@ if __name__ == "__main__":
         writer.write("[test]\n")
         for key, values in test_results.items():
             writer.write("%s = %s\n" % (key, str(values)))
+
+    model_final_path = os.path.join(output_dir, "final_model/")
+    model_final_results_path = os.path.join(model_final_path, "eval_results.txt")
+
+    model_final = SeqClassModel.from_pretrained(
+        max_f1_checkpoint_name, params_dict=config_dict, config=config,
+    )
+    logger.info(model_final_path)
+    try:
+        os.makedirs(model_final_path, exist_ok=True)
+    except OSError as e:
+        logger.info("Model final dir already exists")
+    model_final.save_pretrained(model_final_path)
+    with open(model_final_results_path, "w") as writer:
+        writer.write("[dev]\n")
+        writer.write("%s\n" % (str(dev_results[max_f1_checkpoint_name])))
+
+        writer.write("[test]\n")
+        writer.write("%s\n" % (str(test_results[max_f1_checkpoint_name])))
