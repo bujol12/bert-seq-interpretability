@@ -118,6 +118,7 @@ class SoftAttentionSeqClassModel(nn.Module):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs
     ):
         inp_lengths = (input_ids != 0).sum(dim=1)
         after_dropout = self.dropout(bert_hidden_outputs)
@@ -153,7 +154,7 @@ class SoftAttentionSeqClassModel(nn.Module):
             [bert_hidden_outputs.shape[0], self.num_labels]
         )
 
-        outputs = (self.sentence_scores, self.attention_weights_normalised)
+        outputs = (self.sentence_scores, self.attention_weights_unnormalised)
         loss = None
 
         if labels is not None:
@@ -268,6 +269,7 @@ class SeqClassModel(PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):

@@ -28,6 +28,7 @@ from transformers import (
     Trainer,
     TrainingArguments,
     set_seed,
+    DefaultDataCollator,
 )
 
 from lime.lime_text import LimeTextExplainer
@@ -62,6 +63,8 @@ def batch_predict(
     batch_size=64,
     method="lime",
     data_collator=None,
+    layer_id=None,
+    head_id=None,
 ):
     input_cnt = len(dataset)
     if input_words_str_lst is not None:
@@ -90,11 +93,13 @@ def batch_predict(
         input_cnt = len(input_ids)
 
     final_res = None
-    model.evaluate()
+    model.eval()
 
     for batch_idx in range(0, input_cnt, batch_size):
         # get next batch
         data = {}
+        if batch_idx % 10 == 0:
+            logger.info("batch_idx: " + str(batch_idx))
         if input_ids is not None:
             curr_input_ids = input_ids[batch_idx : batch_idx + batch_size]
             data["input_ids"] = torch.tensor(curr_input_ids).to(device)
@@ -105,24 +110,27 @@ def batch_predict(
             del batch["labels"]
             for key, val in batch.items():
                 data[key] = val.to(device)
-                del batch[key]
+
+            keys_to_del = list(batch.keys())
+            for k in keys_to_del:
+                del batch[k]
 
         if method == "lime":
             numpy_res = classify_sentence(model, data)
         elif method == "model_attention":
-            pass
+            numpy_res = classify_sentence_get_attention(model, data, layer_id, head_id)
         elif method == "soft_attention":
-            pass
+            numpy_res = classify_sentence_get_soft_attention(model, data)
         else:
-            # same as lime, just get the predictions
-            pass
+            numpy_res = classify_sentence(model, data)
 
         if final_res is not None:
             final_res = np.append(final_res, numpy_res, axis=0)
         else:
             final_res = numpy_res
         # cleanup memory before next batch
-        for k in data.keys():
+        keys_to_del = list(data.keys())
+        for k in keys_to_del:
             del data[k]
 
         torch.cuda.empty_cache()
@@ -134,6 +142,11 @@ def classify_sentence_get_attention(model, data, layer_id, head_id):
     res = model(**data)[-1][layer_id][:][
         head_id
     ]  # [attn layer], [layer_id], [all batch], [head_id], [all tokens]
+    return res.detach().cpu().numpy()
+
+
+def classify_sentence_get_soft_attention(model, data):
+    res = model(**data)[-1]
     return res.detach().cpu().numpy()
 
 
@@ -182,6 +195,36 @@ def classify_lime(model, dataset, train_dataset, config_dict):
     return dataset
 
 
+def classify_soft_attention(model, dataset, config_dict, collator):
+    preds = batch_predict(
+        input_words_str_lst=None,
+        model=model,
+        dataset=dataset,
+        method="soft_attention",
+        data_collator=collator,
+    )
+
+    for i in range(len(dataset)):
+        dataset.examples[i].predictions = preds[i].tolist()
+    return dataset
+
+
+def classify_model_attention(model, dataset, config_dict, collator):
+    preds = batch_predict(
+        input_words_str_lst=None,
+        model=model,
+        dataset=dataset,
+        method="model_attention",
+        data_collator=collator,
+        layer_id=config_dict["attn_layer_id"],
+        head_id=config_dict["attn_head_id"],
+    )  # [attentions]
+
+    for i in range(len(dataset)):
+        dataset.examples[i].predictions = preds[i].tolist()
+    return dataset
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         logger.error("Required args: [config_path] [gpu_ids]")
@@ -190,17 +233,18 @@ if __name__ == "__main__":
     config_dict = parse_config(sys.argv[1])
     os.environ["CUDA_VISIBLE_DEVICES"] = str(sys.argv[2])
 
+    set_seed(config_dict["seed"])
+
+    path = config_dict["model_path"]
+    method = config_dict["method"]
+
     output_path = config_dict["output_file"].format(
         model_name=config_dict["model_name"],
         dataset_name=config_dict["dataset"],
         experiment_name=config_dict["experiment_name"],
         datetime=datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%S"),
+        method=method,
     )
-
-    set_seed(config_dict["seed"])
-
-    path = config_dict["model_path"]
-    method = config_dict["method"]
 
     tokenizer = AutoTokenizer.from_pretrained(config_dict["model_name"],)
     config = AutoConfig.from_pretrained(path)
@@ -248,9 +292,9 @@ if __name__ == "__main__":
             config_dict=config_dict,
         )
     elif method == "soft_attention":
-        pass
+        res = classify_soft_attention(model, dataset, config_dict, data_collator)
     elif method == "model_attention":
-        pass
+        res = classify_model_attention(model, dataset, config_dict, data_collator)
 
     if output_path is not None:
         res.write_preds_to_file(output_path, res.examples)

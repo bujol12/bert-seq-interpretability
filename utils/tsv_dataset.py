@@ -65,6 +65,7 @@ class InputFeatures:
     token_type_ids: Optional[List[int]] = None
     label_ids: Optional[List[int]] = None
     labels: Optional[int] = None
+    tokens_to_words_map: List[int] = None
 
 
 @dataclass
@@ -447,6 +448,8 @@ def convert_examples_to_features(
             segment_ids += [pad_token_segment_id] * padding_length
             label_ids += [pad_token_label_id] * padding_length
 
+        token_to_word_map_lst = get_token_to_word_map(label_ids, input_ids)
+
         if (
             is_seq_class and make_all_labels_equal_max
         ):  # skip neg labels of tokens CLS and SEP
@@ -482,6 +485,7 @@ def convert_examples_to_features(
                     attention_mask=input_mask,
                     token_type_ids=segment_ids,
                     labels=labels,
+                    tokens_to_words_map=token_to_word_map_lst,
                 )
             )
         else:
@@ -491,6 +495,7 @@ def convert_examples_to_features(
                     attention_mask=input_mask,
                     token_type_ids=segment_ids,
                     label_ids=label_ids,
+                    tokens_to_words_map=token_to_word_map_lst,
                 )
             )
     return features
@@ -508,6 +513,25 @@ def get_labels(path: str) -> List[str]:
                 if len(tokens) >= 2:
                     labels.add(tokens[1].replace("\n", ""))
     return list(labels)
+
+
+def get_token_to_word_map(label_ids, input_ids):
+    """
+    Map tokens to words in the initial input
+    """
+    token_idx_to_word_idx = []
+    count = -1
+    for idx in range(0, len(label_ids)):
+        if input_ids[idx] == 1 or input_ids[idx] == 2:
+            break
+        if label_ids[idx] != -100:
+            count += 1
+        token_idx_to_word_idx.append(count)
+    token_idx_to_word_idx += [
+        -1 for i in range(len(token_idx_to_word_idx), len(label_ids))
+    ]
+    assert len(token_idx_to_word_idx) == len(label_ids)
+    return token_idx_to_word_idx
 
 
 def compute_seq_classification_metrics(p: EvalPrediction) -> Dict:
