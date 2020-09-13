@@ -184,8 +184,11 @@ if __name__ == "__main__":
     test_results = {}
     checkpoints_list = trainer._sorted_checkpoints()
 
+    logger.info("Saved Checkpoints:")
+    logger.info(str(checkpoints_list))
+
     cnt = 0
-    max_dev_f1 = 0.0
+    max_dev_f1 = -0.1
     max_f1_checkpoint_name = None
     CNT_LIMIT = 5
 
@@ -220,8 +223,10 @@ if __name__ == "__main__":
             eval_dataset=test_dataset,
             compute_metrics=compute_seq_classification_metrics,
         )
-
         test_results[checkpoint_name] = eval_trainer.evaluate()
+
+    logger.info("dev results:")
+    logger.info(str(dev_results))
 
     eval_results_path = os.path.join(output_dir, "eval_results.txt")
 
@@ -237,6 +242,7 @@ if __name__ == "__main__":
     model_final_path = os.path.join(output_dir, "final_model/")
     model_final_results_path = os.path.join(model_final_path, "eval_results.txt")
 
+    logger.info("final_checkpoint name: " + max_f1_checkpoint_name)
     model_final = SeqClassModel.from_pretrained(
         max_f1_checkpoint_name, params_dict=config_dict, config=config,
     )
