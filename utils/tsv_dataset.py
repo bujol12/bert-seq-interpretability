@@ -66,6 +66,7 @@ class InputFeatures:
     label_ids: Optional[List[int]] = None
     labels: Optional[int] = None
     tokens_to_words_map: List[int] = None
+    token_scores: List[float] = None
 
 
 @dataclass
@@ -280,6 +281,11 @@ class TSVClassificationDataset(Dataset):
     def __getitem__(self, i) -> InputFeatures:
         return self.features[i]
 
+    def set_token_scores_from_other_dataset(self, dataset: Dataset):
+        for i in range(0, len(self.features)):
+            assert len(dataset[i].input_ids) == len(self.features[i].input_ids)
+            self.features[i].token_scores = dataset[i].label_ids
+
     def write_preds_to_file(self, filename, examples=None):
         if examples is None:
             examples = self.examples
@@ -382,8 +388,15 @@ def convert_examples_to_features(
             if len(word_tokens) > 0:
                 tokens.extend(word_tokens)
                 # Use the real label id for the first token of the word, and padding ids for the remaining tokens
+                try:
+                    label_val = max(
+                        float(label), 0.0
+                    )  # if labels are already scores (only take +ve ones
+                except:
+                    label_val = label_map[label]  # use label map
+
                 label_ids.extend(
-                    [label_map[label]] + [pad_token_label_id] * (len(word_tokens) - 1)
+                    [label_val] + [pad_token_label_id] * (len(word_tokens) - 1)
                 )
 
         # Account for [CLS] and [SEP] with "- 2" and with "- 3" for RoBERTa.

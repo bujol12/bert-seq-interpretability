@@ -166,7 +166,9 @@ def classify_lime(model, dataset, train_dataset, config_dict):
     explainer = LimeTextExplainer(
         class_names=(0, 1),
         bow=False,  # try with True as well: False causes masking to be done, True means removing words
-        mask_string=tokenizer.mask_token,
+        mask_string=tokenizer.mask_token
+        if not config_dict.get("lime_mask_string_use_pad", False)
+        else tokenizer.pad_token,
         feature_selection="none",  # use all features
         split_expression=r"\s",
     )

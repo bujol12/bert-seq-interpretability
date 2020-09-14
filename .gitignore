@@ -11,3 +11,5 @@ glue_data/
 *.tsv
 *.0
 *.log
+**__pycache__/**
+token_preds/

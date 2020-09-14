@@ -60,7 +60,13 @@ class SoftAttentionSeqClassModel(nn.Module):
 
         self.initializer_name = config_dict["initializer_name"]
         self.num_labels = num_labels
-        self.gamma = config_dict["soft_attention_gamma"]
+
+        self.gamma = config_dict.get(
+            "soft_attention_gamma", 0.0
+        )  # weight for loss based on token attn
+        self.beta = config_dict.get(
+            "soft_attention_beta", 0.0
+        )  # weight based on token scores
 
         self.dropout = nn.Dropout(p=config_dict["hid_to_attn_dropout"])
 
@@ -118,6 +124,7 @@ class SoftAttentionSeqClassModel(nn.Module):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        token_scores=None,
         **kwargs
     ):
         inp_lengths = (input_ids != 0).sum(dim=1)
@@ -190,6 +197,24 @@ class SoftAttentionSeqClassModel(nn.Module):
                 l3 = torch.mean(torch.square(max_attentions.view(-1) - labels.view(-1)))
 
                 loss += self.gamma * (l2 + l3)
+            if self.beta != 0.0:
+                assert token_scores is not None
+                loss_fct = MSELoss()
+                # only supervise the first token of a word - ignore the rest (with labels==-100)
+                # create a mask to remove attn values for token scores == -100:
+                masked_token_scores = torch.where(
+                    token_scores != -100, token_scores, torch.zeros_like(token_scores)
+                )
+                masked_attn_scores = torch.where(
+                    token_scores != -100,
+                    self.attention_weights_unnormalised,
+                    torch.zeros_like(token_scores),
+                )
+                l4 = loss_fct(masked_token_scores.view(-1), masked_attn_scores.view(-1))
+                loss += self.beta * l4
+
+                # zeros_like(token_scores)
+
             outputs = (loss,) + outputs
 
         return outputs
@@ -269,6 +294,7 @@ class SeqClassModel(PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        token_scores=None,
         **kwargs
     ):
         r"""
