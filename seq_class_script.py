@@ -114,9 +114,8 @@ if __name__ == "__main__":
     dev_dataset = TSVClassificationDataset(mode=Split.dev, **data_config)
     test_dataset = TSVClassificationDataset(mode=Split.test, **data_config)
 
-    token_input_dir = config_dict.get("token_input_dir", None)
-    if token_input_dir is not None:
-        filename_template = config_dict["token_input_filename"]
+    token_input_filepath = config_dict.get("token_input_filepath", None)
+    if token_input_filepath is not None:
         data_config_token = dict(
             data_dir=token_input_dir,
             tokenizer=tokenizer,
@@ -131,23 +130,23 @@ if __name__ == "__main__":
         )
         train_dataset_token_labels = TSVClassificationDataset(
             mode=Split.train,
-            file_name=filename_template.format(mode="train"),
+            file_name=token_input_filepath.format(mode="train"),
             **data_config_token
         )
-        dev_dataset_token_labels = TSVClassificationDataset(
-            mode=Split.dev,
-            file_name=filename_template.format(mode="dev"),
-            **data_config_token
-        )
-        test_dataset_token_labels = TSVClassificationDataset(
-            mode=Split.test,
-            file_name=filename_template.format(mode="test"),
-            **data_config_token
-        )
+        # dev_dataset_token_labels = TSVClassificationDataset(
+        #    mode=Split.dev,
+        #    file_name=token_input_filepath.format(mode="dev"),
+        #    **data_config_token
+        # )
+        # test_dataset_token_labels = TSVClassificationDataset(
+        #    mode=Split.test,
+        #    file_name=token_input_filepath.format(mode="test"),
+        #    **data_config_token
+        # )
 
         train_dataset.set_token_scores_from_other_dataset(train_dataset_token_labels)
-        dev_dataset.set_token_scores_from_other_dataset(dev_dataset_token_labels)
-        test_dataset.set_token_scores_from_other_dataset(test_dataset_token_labels)
+        # dev_dataset.set_token_scores_from_other_dataset(dev_dataset_token_labels)
+        # test_dataset.set_token_scores_from_other_dataset(test_dataset_token_labels)
 
     training_args = TrainingArguments(
         output_dir=output_dir,

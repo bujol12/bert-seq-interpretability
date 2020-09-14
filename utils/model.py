@@ -197,7 +197,7 @@ class SoftAttentionSeqClassModel(nn.Module):
                 l3 = torch.mean(torch.square(max_attentions.view(-1) - labels.view(-1)))
 
                 loss += self.gamma * (l2 + l3)
-            if self.beta != 0.0:
+            if self.beta != 0.0 and token_scores is not None:
                 assert token_scores is not None
                 loss_fct = MSELoss()
                 # only supervise the first token of a word - ignore the rest (with labels==-100)
