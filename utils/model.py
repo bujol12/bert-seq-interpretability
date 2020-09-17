@@ -129,7 +129,7 @@ class SoftAttentionSeqClassModel(nn.Module):
     ):
         inp_lengths = (input_ids != 0).sum(dim=1)
         after_dropout = self.dropout(bert_hidden_outputs)
-        attn_evidence = self.attention_evidence(after_dropout)
+        attn_evidence = torch.tanh(self.attention_evidence(after_dropout))
         attn_weights = self.attention_weights(attn_evidence)
 
         attn_weights = attn_weights.view(
@@ -198,7 +198,6 @@ class SoftAttentionSeqClassModel(nn.Module):
 
                 loss += self.gamma * (l2 + l3)
             if self.beta != 0.0 and token_scores is not None:
-                assert token_scores is not None
                 loss_fct = MSELoss()
                 # only supervise the first token of a word - ignore the rest (with labels==-100)
                 # create a mask to remove attn values for token scores == -100:
@@ -208,7 +207,7 @@ class SoftAttentionSeqClassModel(nn.Module):
                 masked_attn_scores = torch.where(
                     token_scores != -100,
                     self.attention_weights_unnormalised,
-                    torch.zeros_like(token_scores),
+                    torch.zeros_like(self.attention_weights_unnormalised),
                 )
                 l4 = loss_fct(masked_token_scores.view(-1), masked_attn_scores.view(-1))
                 loss += self.beta * l4
@@ -323,6 +322,8 @@ class SeqClassModel(PreTrainedModel):
                 head_mask=head_mask,
                 inputs_embeds=inputs_embeds,
                 labels=labels,
+                token_scores=token_scores,
+                **kwargs
             )  # (loss), logits, word attentions
         else:
             pooled_output = outputs[1]

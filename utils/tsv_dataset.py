@@ -122,8 +122,11 @@ class MaskedDataCollator:
                 if isinstance(v, torch.Tensor):
                     batch[k] = torch.stack([f[k] for f in features])
                 else:
-                    batch[k] = torch.tensor([f[k] for f in features], dtype=torch.long)
-
+                    if isinstance(v, list):
+                        dtype = torch.long if type(v[0]) is int else torch.float
+                    else:
+                        dtype = torch.long if type(v) is int else torch.float
+                    batch[k] = torch.tensor([f[k] for f in features], dtype=dtype)
         return batch
 
     def mask_tokens(self, inputs: InputFeatures) -> InputFeatures:

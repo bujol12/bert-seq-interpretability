@@ -34,6 +34,7 @@ def choose_top_and_threshold(
     examples, importance_threshold, top_count, pos_label, default_label
 ):
     y_pred = []
+    # print(importance_threshold)
     for example in examples:
         predictions = []
         scores = [
@@ -42,12 +43,11 @@ def choose_top_and_threshold(
         scores.sort(key=lambda x: x[1])
 
         labels = list(map(lambda x: x[0], scores[-top_count:]))
-        #       print(labels)
         count = 0
         for idx in range(0, len(example.labels)):
             label = example.labels[idx]
-            #            print (label, importance_threshold, idx)
-            #            print (float(label) >= importance_threshold, idx in labels)
+            # print(label, importance_threshold, idx)
+            # print(float(label) >= importance_threshold, idx in labels)
             if float(label) >= importance_threshold and idx in labels:
                 predictions.append(pos_label)
                 count += 1
@@ -79,7 +79,7 @@ def pred_stats(y_true, y_pred, label):
 
 def get_pred_scores(y_true, y_pred, label):
     pred_stats_res = pred_stats(y_true, y_pred, label)
-    # print(pred_stats_res)
+    print(pred_stats_res)
     res = {}
     res["precision"] = (
         pred_stats_res["correct_cnt"] / pred_stats_res["predicted_cnt"]
@@ -209,7 +209,7 @@ if __name__ == "__main__":
         results_dataset.examples,
         config_dict["importance_threshold"],
         int(config_dict["top_count"]),
-        default_label=labels[0],
+        default_label=labels[0] if labels[0] != positive_label else labels[1],
         pos_label=positive_label,
     )
 

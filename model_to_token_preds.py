@@ -67,6 +67,7 @@ def batch_predict(
     head_id=None,
 ):
     input_cnt = len(dataset)
+    input_ids = None
     if input_words_str_lst is not None:
         # input prep should be replaced with collator
         input_words_lst = [
@@ -98,14 +99,14 @@ def batch_predict(
     for batch_idx in range(0, input_cnt, batch_size):
         # get next batch
         data = {}
-        if batch_idx % 10 == 0:
+        if (batch_idx // 64) % 10 == 0:
             logger.info("batch_idx: " + str(batch_idx))
         if input_ids is not None:
             curr_input_ids = input_ids[batch_idx : batch_idx + batch_size]
             data["input_ids"] = torch.tensor(curr_input_ids).to(device)
         else:
             batch = data_collator.collate_batch(
-                dataset[batch_ids : batch_idx + batch_size]
+                dataset[batch_idx : batch_idx + batch_size]
             )
             del batch["labels"]
             for key, val in batch.items():
@@ -139,26 +140,33 @@ def batch_predict(
 
 
 def classify_sentence_get_attention(model, data, layer_id, head_id):
-    res = model(**data)[-1][layer_id][:][
-        head_id
-    ]  # [attn layer], [layer_id], [all batch], [head_id], [all tokens]
-    return res.detach().cpu().numpy()
+    with torch.no_grad():
+        res = model(**data)[-1][layer_id][:][
+            head_id
+        ]  # [attn layer], [layer_id], [all batch], [head_id], [all tokens]
+        res_np = res.detach().cpu().numpy()
+        del res
+    return res_np
 
 
 def classify_sentence_get_soft_attention(model, data):
-    res = model(**data)[-1]
-    return res.detach().cpu().numpy()
+    with torch.no_grad():
+        res = model(**data)
+        res_np = res[-1].detach().cpu().numpy()
+        del res
+    return res_np
 
 
 def classify_sentence(model, data):
-    sm = torch.nn.Softmax(dim=1)
-    res = model(**data)
-    res_sm = sm(res[0])
+    with torch.no_grad():
+        sm = torch.nn.Softmax(dim=1)
+        res = model(**data)
+        res_sm = sm(res[0])
 
-    numpy_res = res_sm.detach().cpu().numpy()
-    # numpy_res = res[0].detach().cpu().numpy()
-    del res
-    del res_sm
+        numpy_res = res_sm.detach().cpu().numpy()
+        # numpy_res = res[0].detach().cpu().numpy()
+        del res
+        del res_sm
     return numpy_res
 
 
@@ -183,7 +191,7 @@ def classify_lime(model, dataset, train_dataset, config_dict):
     res_list = []
     for i in range(0, len(dataset)):
         if i % 50 == 0:
-            logger.info(i)
+            logger.info("lime_sample_idx:" + str(i) + "/" + str(len(dataset)))
         exp = explainer.explain_instance(
             " ".join(dataset.examples[i].words),
             classify_sentence_partial,
@@ -205,9 +213,9 @@ def classify_soft_attention(model, dataset, config_dict, collator):
         method="soft_attention",
         data_collator=collator,
     )
-
+    preds = convert_token_scores_to_words(preds, dataset)
     for i in range(len(dataset)):
-        dataset.examples[i].predictions = preds[i].tolist()
+        dataset.examples[i].predictions = preds[i]
     return dataset
 
 
@@ -222,9 +230,25 @@ def classify_model_attention(model, dataset, config_dict, collator):
         head_id=config_dict["attn_head_id"],
     )  # [attentions]
 
+    preds = convert_token_scores_to_words(preds, dataset)
+
     for i in range(len(dataset)):
-        dataset.examples[i].predictions = preds[i].tolist()
+        dataset.examples[i].predictions = preds[i]
     return dataset
+
+
+def convert_token_scores_to_words(result, dataset):
+    res = []
+    for i in range(0, len(dataset)):
+        data = dataset[i]
+        word_scores = np.zeros(len(dataset.examples[i].words), dtype=np.float)
+        assert len(result[i]) == len(data.tokens_to_words_map)
+        for j in range(0, len(result[i])):
+            if data.tokens_to_words_map[j] == -1:
+                continue
+            word_scores[data.tokens_to_words_map[j]] += result[i][j]
+        res.append(word_scores)
+    return res
 
 
 if __name__ == "__main__":

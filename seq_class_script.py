@@ -114,8 +114,9 @@ if __name__ == "__main__":
     dev_dataset = TSVClassificationDataset(mode=Split.dev, **data_config)
     test_dataset = TSVClassificationDataset(mode=Split.test, **data_config)
 
-    token_input_filepath = config_dict.get("token_input_filepath", None)
-    if token_input_filepath is not None:
+    token_input_dir = config_dict.get("token_input_dir", None)
+    if token_input_dir is not None:
+        token_input_filename = config_dict.get("token_input_filename", None)
         data_config_token = dict(
             data_dir=token_input_dir,
             tokenizer=tokenizer,
@@ -130,7 +131,7 @@ if __name__ == "__main__":
         )
         train_dataset_token_labels = TSVClassificationDataset(
             mode=Split.train,
-            file_name=token_input_filepath.format(mode="train"),
+            file_name=token_input_filename.format(mode="train"),
             **data_config_token
         )
         # dev_dataset_token_labels = TSVClassificationDataset(
@@ -147,12 +148,12 @@ if __name__ == "__main__":
         train_dataset.set_token_scores_from_other_dataset(train_dataset_token_labels)
         # dev_dataset.set_token_scores_from_other_dataset(dev_dataset_token_labels)
         # test_dataset.set_token_scores_from_other_dataset(test_dataset_token_labels)
-
+    logger.info(train_dataset[0].token_scores)
     training_args = TrainingArguments(
         output_dir=output_dir,
         overwrite_output_dir=True,
         do_train=True,
-        do_eval=True,
+        do_eval=False,
         per_device_train_batch_size=config_dict["per_device_train_batch_size"],
         per_device_eval_batch_size=config_dict["per_device_eval_batch_size"],
         num_train_epochs=config_dict["num_train_epochs"],
