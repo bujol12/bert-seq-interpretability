@@ -127,7 +127,7 @@ class SoftAttentionSeqClassModel(nn.Module):
         token_scores=None,
         **kwargs
     ):
-        inp_lengths = (input_ids != 0).sum(dim=1)
+        inp_lengths = (attention_mask != 0).sum(dim=1)
         after_dropout = self.dropout(bert_hidden_outputs)
         attn_evidence = torch.tanh(self.attention_evidence(after_dropout))
         attn_weights = self.attention_weights(attn_evidence)
@@ -135,17 +135,17 @@ class SoftAttentionSeqClassModel(nn.Module):
         attn_weights = attn_weights.view(
             bert_hidden_outputs.size()[:2]
         )  # batch_size, seq_length
-        attn_weights[:, 0] = 0.0  # exclude CLS token
 
         attn_weights = self.attention_act(attn_weights)
-
-        self.attention_weights_unnormalised = attn_weights
+        attn_weights[:, 0] = 0.0  # exclude CLS token
 
         attn_weights = torch.where(
             self._sequence_mask(inp_lengths, maxlen=input_ids.shape[1]),
             attn_weights,
             torch.zeros_like(attn_weights),  # seq length
         )
+
+        self.attention_weights_unnormalised = attn_weights
 
         # normalise attn weights
         attn_weights = attn_weights / torch.sum(attn_weights, dim=1, keepdim=True)

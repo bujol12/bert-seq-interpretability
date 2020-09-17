@@ -88,7 +88,7 @@ datasets = dict(
         data_dir="data/fce_v1_tsv",
         labels="data/fce_v1_tsv/fce-public.train.original.tsv_sentencelevel",
         file_name="fce-public.{mode}.original.tsv_sentencelevel",
-        file_name_token="fce-public.{mode}.original.tsv_sentencelevel",
+        file_name_token="fce-public.{mode}.original.tsv",
         positive_label="i",
     ),
     conll10=DataTrainingArguments(

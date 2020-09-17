@@ -149,7 +149,12 @@ def get_map(y_true, y_pred, label):
         if (
             max(y_true[i]) > 0.0
         ):  # only calculate MAP over sentences with positive tokens
-            sum_val += average_precision_score(y_true[i], y_pred[i])
+            # logger.info("Results:")
+            # logger.info(y_true[i])
+            # logger.info(y_pred[i])
+            ap = average_precision_score(y_true[i], y_pred[i])
+            # logger.info(ap)
+            sum_val += ap
             cnt += 1
     return sum_val / cnt  # mean AP
 
@@ -226,7 +231,6 @@ if __name__ == "__main__":
             results_dataset.examples,
         )  # make labels be within 0 and 1
     )
-
     y_true_values = list(
         map(
             lambda ex: list(
@@ -235,7 +239,11 @@ if __name__ == "__main__":
             eval_dataset.examples,
         )
     )
-
+    for i in range(0, len(y_true)):
+        if max(y_true_values[i]) > 0:
+            logger.info(y_true[i])
+            logger.info(y_true_values[i])
+            break
     logger.info("Get MAP and Correlation metrics")
     res["MAP"] = get_map(y_true_values, y_pred_values, positive_label)
     res["corr"] = get_corr(y_true_values, y_pred_values)

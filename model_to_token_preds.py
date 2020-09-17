@@ -246,7 +246,9 @@ def convert_token_scores_to_words(result, dataset):
         for j in range(0, len(result[i])):
             if data.tokens_to_words_map[j] == -1:
                 continue
-            word_scores[data.tokens_to_words_map[j]] += result[i][j]
+            word_scores[data.tokens_to_words_map[j]] = max(
+                result[i][j], word_scores[data.tokens_to_words_map[j]]
+            )
         res.append(word_scores)
     return res
 
