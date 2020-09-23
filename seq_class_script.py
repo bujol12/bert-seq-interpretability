@@ -144,7 +144,7 @@ if __name__ == "__main__":
         #    file_name=token_input_filepath.format(mode="test"),
         #    **data_config_token
         # )
-
+        print(len(train_dataset_token_labels.examples), len(train_dataset.examples))
         train_dataset.set_token_scores_from_other_dataset(train_dataset_token_labels)
         # dev_dataset.set_token_scores_from_other_dataset(dev_dataset_token_labels)
         # test_dataset.set_token_scores_from_other_dataset(test_dataset_token_labels)

@@ -141,9 +141,10 @@ def batch_predict(
 
 def classify_sentence_get_attention(model, data, layer_id, head_id):
     with torch.no_grad():
-        res = model(**data)[-1][layer_id][:][
-            head_id
-        ]  # [attn layer], [layer_id], [all batch], [head_id], [all tokens]
+        res = model(**data)[-1][layer_id][
+            :, head_id
+        ]  # [attn layer], [layer_id], [all batch], [head_id], [all tokens] [all_tokens]
+        res = res.mean(dim=1)
         res_np = res.detach().cpu().numpy()
         del res
     return res_np
@@ -229,9 +230,7 @@ def classify_model_attention(model, dataset, config_dict, collator):
         layer_id=config_dict["attn_layer_id"],
         head_id=config_dict["attn_head_id"],
     )  # [attentions]
-
     preds = convert_token_scores_to_words(preds, dataset)
-
     for i in range(len(dataset)):
         dataset.examples[i].predictions = preds[i]
     return dataset
@@ -254,7 +253,7 @@ def convert_token_scores_to_words(result, dataset):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    if len(sys.argv) < 3:
         logger.error("Required args: [config_path] [gpu_ids]")
         exit()
 
@@ -307,6 +306,7 @@ if __name__ == "__main__":
         dataset = TSVClassificationDataset(mode=Split.dev, **data_config)
     elif config_dict["dataset_split"] == "test":
         dataset = TSVClassificationDataset(mode=Split.test, **data_config)
+        print(len(dataset.examples))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -322,7 +322,27 @@ if __name__ == "__main__":
     elif method == "soft_attention":
         res = classify_soft_attention(model, dataset, config_dict, data_collator)
     elif method == "model_attention":
+        if len(sys.argv) != 5:
+            print(
+                "For model classication, required args are [config_path] [gpu_ids] [layer_id] [head_id]"
+            )
+            exit()
+        config_dict["attn_layer_id"] = int(sys.argv[3])
+        config_dict["attn_head_id"] = int(sys.argv[4])
+
+        output_path = config_dict["output_file"].format(
+            model_name=config_dict["model_name"],
+            dataset_name=config_dict["dataset"],
+            experiment_name=config_dict["experiment_name"]
+            + "_layer={}_head={}".format(
+                config_dict["attn_layer_id"], config_dict["attn_head_id"]
+            ),
+            datetime=datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%S"),
+            method=method,
+        )
+
         res = classify_model_attention(model, dataset, config_dict, data_collator)
 
     if output_path is not None:
+        print(len(res.examples))
         res.write_preds_to_file(output_path, res.examples)

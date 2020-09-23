@@ -59,8 +59,10 @@ class SoftAttentionSeqClassModel(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.initializer_name = config_dict["initializer_name"]
+        self.square_attention = config_dict.get("square_attention", False)
         self.num_labels = num_labels
 
+        self.alpha = config_dict.get("soft_attention_alpha", 0.0)
         self.gamma = config_dict.get(
             "soft_attention_gamma", 0.0
         )  # weight for loss based on token attn
@@ -127,7 +129,9 @@ class SoftAttentionSeqClassModel(nn.Module):
         token_scores=None,
         **kwargs
     ):
-        inp_lengths = (attention_mask != 0).sum(dim=1)
+        inp_lengths = (attention_mask != 0).sum(dim=1) - 1  # exc CLS removed next
+        bert_length = input_ids.shape[1] - 1
+        bert_hidden_outputs = bert_hidden_outputs[:, 1:]  # remove CLS
         after_dropout = self.dropout(bert_hidden_outputs)
         attn_evidence = torch.tanh(self.attention_evidence(after_dropout))
         attn_weights = self.attention_weights(attn_evidence)
@@ -137,16 +141,16 @@ class SoftAttentionSeqClassModel(nn.Module):
         )  # batch_size, seq_length
 
         attn_weights = self.attention_act(attn_weights)
-        attn_weights[:, 0] = 0.0  # exclude CLS token
 
         attn_weights = torch.where(
-            self._sequence_mask(inp_lengths, maxlen=input_ids.shape[1]),
+            self._sequence_mask(inp_lengths, maxlen=bert_length),
             attn_weights,
             torch.zeros_like(attn_weights),  # seq length
         )
 
         self.attention_weights_unnormalised = attn_weights
-
+        if self.square_attention:
+            attn_weights = torch.square(attn_weights)
         # normalise attn weights
         attn_weights = attn_weights / torch.sum(attn_weights, dim=1, keepdim=True)
         self.attention_weights_normalised = attn_weights
@@ -161,7 +165,16 @@ class SoftAttentionSeqClassModel(nn.Module):
             [bert_hidden_outputs.shape[0], self.num_labels]
         )
 
-        outputs = (self.sentence_scores, self.attention_weights_unnormalised)
+        outputs = (
+            self.sentence_scores,
+            torch.cat(
+                [
+                    torch.zeros((input_ids.shape[0], 1)).to(self.device),
+                    self.attention_weights_unnormalised,
+                ],
+                dim=1,
+            ),
+        )
         loss = None
 
         if labels is not None:
@@ -174,38 +187,43 @@ class SoftAttentionSeqClassModel(nn.Module):
                 loss = loss_fct(
                     self.sentence_scores.view(-1, self.num_labels), labels.view(-1)
                 )
-            if self.gamma != 0:
+            if self.alpha != 0:
                 min_attentions, _ = torch.min(
                     torch.where(
-                        self._sequence_mask(inp_lengths, maxlen=input_ids.shape[1]),
+                        self._sequence_mask(inp_lengths, maxlen=bert_length),
                         self.attention_weights_unnormalised,
                         torch.zeros_like(self.attention_weights_unnormalised) + 1e6,
-                    )[:, 1:],
+                    ),  # [:, 1:],
                     dim=1,
                 )
+                l2 = self.alpha * torch.mean(torch.square(min_attentions.view(-1)))
+
+                loss += l2
+
+            if self.gamma != 0:
                 # don't include 0 for CLS token
-                max_attentions, _ = torch.max(
-                    torch.where(
-                        self._sequence_mask(inp_lengths, maxlen=input_ids.shape[1]),
-                        self.attention_weights_unnormalised,
-                        torch.zeros_like(self.attention_weights_unnormalised) - 1e6,
-                    ),
-                    dim=1,
+                attn_weights_masked = torch.where(
+                    self._sequence_mask(inp_lengths, maxlen=bert_length),
+                    self.attention_weights_unnormalised,
+                    torch.zeros_like(self.attention_weights_unnormalised) - 1e6,
+                )
+                max_attentions, _ = torch.max(attn_weights_masked, dim=1,)
+                l3 = self.gamma * torch.mean(
+                    torch.square(max_attentions.view(-1) - labels.view(-1))
                 )
 
-                l2 = torch.mean(torch.square(min_attentions.view(-1)))
-                l3 = torch.mean(torch.square(max_attentions.view(-1) - labels.view(-1)))
-
-                loss += self.gamma * (l2 + l3)
+                loss += l3
             if self.beta != 0.0 and token_scores is not None:
                 loss_fct = MSELoss()
                 # only supervise the first token of a word - ignore the rest (with labels==-100)
                 # create a mask to remove attn values for token scores == -100:
                 masked_token_scores = torch.where(
-                    token_scores != -100, token_scores, torch.zeros_like(token_scores)
+                    token_scores[:, 1:] != -100,
+                    token_scores[:, 1:],
+                    torch.zeros_like(token_scores[:, 1:]),
                 )
                 masked_attn_scores = torch.where(
-                    token_scores != -100,
+                    token_scores[:, 1:] != -100,
                     self.attention_weights_unnormalised,
                     torch.zeros_like(self.attention_weights_unnormalised),
                 )
@@ -252,6 +270,14 @@ class SeqClassModel(PreTrainedModel):
             from_tf=bool(".ckpt" in self.config_dict["model_name"]),
             config=model_config,
         )
+        cnt = 0
+        for layer in self.bert.children():
+            if cnt >= self.config_dict.get("freeze_bert_layers_up_to", 0):
+                break
+            cnt += 1
+            for param in layer.parameters():
+                param.requires_grad = False
+
         self.post_bert_model = None
         if self.config_dict.get("soft_attention", False):
             self.post_bert_model = SoftAttentionSeqClassModel(
@@ -311,7 +337,7 @@ class SeqClassModel(PreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-        )  # hidden states, attentions
+        )  # last hidden states, pooler output, hidden states, attentions
         if self.post_bert_model is not None:
             outputs = self.post_bert_model.forward(
                 outputs[0],

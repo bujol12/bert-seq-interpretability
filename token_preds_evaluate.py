@@ -63,6 +63,7 @@ def pred_stats(y_true, y_pred, label):
     correct_cnt = 0
     total_cnt = 0
     for i in range(0, len(y_true)):
+        # print(i, len(y_true[i]), len(y_pred[i]))
         for j in range(0, len(y_true[i])):
             if y_pred[i][j] == label:
                 predicted_cnt += 1
@@ -160,7 +161,7 @@ def get_map(y_true, y_pred, label):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    if len(sys.argv) < 2:
         logger.error("Required args: [config_path]")
         exit()
 
@@ -171,12 +172,23 @@ if __name__ == "__main__":
     labels = get_labels(dataset.labels)
     positive_label = dataset.positive_label
 
+    attn_head_id = None
+    attn_layer_id = None
+    if config_dict["method"] == "model_attention":
+        if len(sys.argv) != 4:
+            logger.error("Required args: [config_path] [layer_id] [head_id]")
+            exit()
+        attn_head_id = int(sys.argv[3])
+        attn_layer_id = int(sys.argv[2])
+
     input_dir = config_dict["results_input_dir"].format(
         method=config_dict["method"],
-        experiment_name=config_dict["experiment_name"],
+        experiment_name=config_dict["experiment_name"].format(
+            attn_layer_id, attn_head_id
+        ),
         model_name=config_dict["model_name"],
         dataset_name=config_dict["dataset"],
-        datetime=config_dict["datetime"],
+        datetime=config_dict.get("datetime", ""),
     )
 
     str2mode = {"dev": Split.dev, "train": Split.train, "test": Split.test}
@@ -208,7 +220,8 @@ if __name__ == "__main__":
         file_name=dataset.file_name_token,
         **data_config
     )
-
+    print(len(eval_dataset.examples))
+    print(len(results_dataset.examples))
     logger.info("Apply threshold and top count")
     y_pred = choose_top_and_threshold(
         results_dataset.examples,
@@ -251,10 +264,8 @@ if __name__ == "__main__":
     logger.info("RESULTS:")
     logger.info(str(res))
 
-    if config_dict.get("preds_output_filename", None) is not None:
-        # save preds
-        logger.info("saving preds")
-        filename = os.path.join(input_dir, config_dict["preds_output_filename"])
-    if "eval_results_filename" in config_dict:
+    if config_dict.get("eval_results_filename", None) is not None:
         logger.info("saving eval results")
         filename = os.path.join(input_dir, config_dict["eval_results_filename"])
+        with open(filename, "w") as fhand:
+            fhand.write(str(res))
