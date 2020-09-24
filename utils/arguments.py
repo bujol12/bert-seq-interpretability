@@ -131,6 +131,14 @@ datasets = dict(
         file_name_token="semeval15t10.tokens.negative.{mode}2013.tsv",
         positive_label="N",
     ),
+    bea19=DataTrainingArguments(
+        name="bea19",
+        data_dir="data/bea19",
+        labels="data/bea19/train.tsv_sentencelevel",
+        file_name="{mode}.tsv_sentencelevel",
+        file_name_token="{mode}.tsv",
+        positive_label="i",
+    )
     # sst2_pos_neg=DataTrainingArguments(
     #    name="sst2_pos_neg",
     #    data_dir="data/SST-2/",

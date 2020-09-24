@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 import uuid
 import json
+from shutil import rmtree
 
 import numpy as np
 
@@ -224,7 +225,6 @@ if __name__ == "__main__":
     cnt = 0
     max_dev_f1 = -0.1
     max_f1_checkpoint_name = None
-    CNT_LIMIT = 5
 
     for checkpoint_name in checkpoints_list:
         path = (
@@ -245,11 +245,6 @@ if __name__ == "__main__":
         if curr_dev_f1 > max_dev_f1:
             max_f1_checkpoint_name = checkpoint_name
             max_dev_f1 = curr_dev_f1
-            cnt = 0
-        else:
-            cnt += 1
-            if cnt > CNT_LIMIT:
-                break
 
         eval_trainer = Trainer(
             model=model_new,
@@ -292,3 +287,6 @@ if __name__ == "__main__":
 
         writer.write("[test]\n")
         writer.write("%s\n" % (str(test_results[max_f1_checkpoint_name])))
+
+    for path in checkpoints_list:
+        rmtree(path)

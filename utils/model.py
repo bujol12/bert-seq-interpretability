@@ -70,6 +70,9 @@ class SoftAttentionSeqClassModel(nn.Module):
             "soft_attention_beta", 0.0
         )  # weight based on token scores
 
+        self.zero_delta = config_dict.get("zero_delta", 0.0)
+        self.zero_n = config_dict.get("zero_n", 0)
+
         self.dropout = nn.Dropout(p=config_dict["hid_to_attn_dropout"])
 
         self.attention_evidence = nn.Linear(
@@ -211,6 +214,7 @@ class SoftAttentionSeqClassModel(nn.Module):
                 l3 = self.gamma * torch.mean(
                     torch.square(max_attentions.view(-1) - labels.view(-1))
                 )
+                # logger.info("labels: " + str(labels.view(-1)))
 
                 loss += l3
             if self.beta != 0.0 and token_scores is not None:
@@ -229,8 +233,23 @@ class SoftAttentionSeqClassModel(nn.Module):
                 )
                 l4 = loss_fct(masked_token_scores.view(-1), masked_attn_scores.view(-1))
                 loss += self.beta * l4
+            if self.zero_delta != 0.0 and self.zero_n != 0:
+                attn_weights_masked = torch.where(
+                    self._sequence_mask(inp_lengths, maxlen=bert_length),
+                    self.attention_weights_unnormalised,
+                    torch.zeros_like(self.attention_weights_unnormalised) + 1e6,
+                )
+                attn_weights_sorted = attn_weights_masked.sort(dim=1)[0][
+                    :, : self.zero_n
+                ]
 
-                # zeros_like(token_scores)
+                attn_weights_mean = torch.mean(
+                    torch.square(attn_weights_sorted).view(-1)
+                )
+                # logger.info("attn_weigts_mean: " + str(attn_weights_sorted))
+
+                l5 = attn_weights_mean
+                loss += self.zero_delta * l5
 
             outputs = (loss,) + outputs
 

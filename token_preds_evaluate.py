@@ -46,6 +46,7 @@ def choose_top_and_threshold(
         count = 0
         for idx in range(0, len(example.labels)):
             label = example.labels[idx]
+            # label = 1.0 - float(label)
             # print(label, importance_threshold, idx)
             # print(float(label) >= importance_threshold, idx in labels)
             if float(label) >= importance_threshold and idx in labels:
@@ -210,7 +211,8 @@ if __name__ == "__main__":
         input_dir,
         tokenizer=None,
         file_name=config_dict["results_input_filename"],
-        **data_config
+        normalise_labels=config_dict.get("normalise_preds", False),
+        **data_config,
     )
 
     logger.info("Reading gold labels.")
@@ -218,7 +220,7 @@ if __name__ == "__main__":
         dataset.data_dir,
         tokenizer=None,
         file_name=dataset.file_name_token,
-        **data_config
+        **data_config,
     )
     print(len(eval_dataset.examples))
     print(len(results_dataset.examples))

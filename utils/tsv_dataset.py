@@ -236,6 +236,7 @@ class TSVClassificationDataset(Dataset):
         make_all_labels_equal_max: bool = False,
         is_seq_class: bool = False,
         lowercase: bool = False,
+        normalise_labels: bool = False,
     ):
 
         # Make sure only the first process in distributed training processes the dataset,
@@ -248,7 +249,7 @@ class TSVClassificationDataset(Dataset):
         )
         logger.info(f"Creating features from dataset file at {data_dir}")
         self.examples = read_examples_from_file(
-            data_dir, mode, file_name, default_label
+            data_dir, mode, file_name, default_label, normalise_labels
         )
         # TODO clean up all this to leverage built-in features of tokenizers
         if tokenizer is not None:
@@ -307,7 +308,11 @@ class TSVClassificationDataset(Dataset):
 
 
 def read_examples_from_file(
-    data_dir, mode: Union[Split, str], file_name: str, default_label: str
+    data_dir,
+    mode: Union[Split, str],
+    file_name: str,
+    default_label: str,
+    normalise_labels=False,
 ) -> List[InputExample]:
     if isinstance(mode, Split):
         mode = mode.value
@@ -320,6 +325,8 @@ def read_examples_from_file(
         for line in f:
             if line.startswith("-DOCSTART-") or line == "" or line == "\n":
                 if words:
+                    if normalise_labels:
+                        labels = normalise_and_replace_neg_labels(labels)
                     examples.append(
                         InputExample(
                             guid=f"{mode}-{guid_index}", words=words, labels=labels
@@ -338,6 +345,8 @@ def read_examples_from_file(
                     # Examples could have no label for mode = "test"
                     labels.append(default_label)
         if words:
+            if normalise_labels:
+                labels = normalise_and_replace_neg_labels(labels)
             examples.append(
                 InputExample(guid=f"{mode}-{guid_index}", words=words, labels=labels)
             )
@@ -559,3 +568,11 @@ def compute_seq_classification_metrics(p: EvalPrediction) -> Dict:
         "f1": f1_score(out_label_list, preds_list),
         "accuracy": accuracy_score(out_label_list, preds_list),
     }
+
+
+def normalise_and_replace_neg_labels(labels):
+    labels = list(map(lambda x: max(0.0, float(x)), labels))
+    sum_val = sum(labels)
+    logger.info(sum_val)
+    labels = list(map(lambda x: x / sum_val if sum_val != 0.0 else 0.0, labels))
+    return labels

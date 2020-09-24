@@ -278,6 +278,7 @@ if __name__ == "__main__":
     model = SeqClassModel.from_pretrained(path, config=config, params_dict=config_dict)
 
     labels = [model.config.id2label[0], model.config.id2label[1]]
+    logger.info("labels_ids: " + str(labels))
 
     model_args = ModelArguments(model_name_or_path=config_dict["model_name"])
 
