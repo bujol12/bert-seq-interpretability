@@ -13,5 +13,5 @@ configs/final/**/
 *.tsv
 *.0
 *.log
-**__pycache__/**
+utils/__pycache__/**
 token_preds/
