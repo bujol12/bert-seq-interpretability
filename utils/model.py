@@ -72,6 +72,7 @@ class SoftAttentionSeqClassModel(nn.Module):
 
         self.zero_delta = config_dict.get("zero_delta", 0.0)
         self.zero_n = config_dict.get("zero_n", 0)
+        self.normalise_labels = config_dict.get("normalise_labels", False)
 
         self.dropout = nn.Dropout(p=config_dict["hid_to_attn_dropout"])
 
@@ -226,10 +227,15 @@ class SoftAttentionSeqClassModel(nn.Module):
                     token_scores[:, 1:],
                     torch.zeros_like(token_scores[:, 1:]),
                 )
+
+                attn_weights_supervised = self.attention_weights_unnormalised
+                if self.normalise_labels:
+                    attn_weights_supervised = self.attention_weights_normalised
+
                 masked_attn_scores = torch.where(
                     token_scores[:, 1:] != -100,
-                    self.attention_weights_unnormalised,
-                    torch.zeros_like(self.attention_weights_unnormalised),
+                    attn_weights_supervised,
+                    torch.zeros_like(attn_weights_supervised),
                 )
                 l4 = loss_fct(masked_token_scores.view(-1), masked_attn_scores.view(-1))
                 loss += self.beta * l4

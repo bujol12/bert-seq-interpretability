@@ -573,6 +573,6 @@ def compute_seq_classification_metrics(p: EvalPrediction) -> Dict:
 def normalise_and_replace_neg_labels(labels):
     labels = list(map(lambda x: max(0.0, float(x)), labels))
     sum_val = sum(labels)
-    logger.info(sum_val)
+    # logger.info(sum_val)
     labels = list(map(lambda x: x / sum_val if sum_val != 0.0 else 0.0, labels))
     return labels

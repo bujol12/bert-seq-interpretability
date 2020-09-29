@@ -133,7 +133,8 @@ if __name__ == "__main__":
         train_dataset_token_labels = TSVClassificationDataset(
             mode=Split.train,
             file_name=token_input_filename.format(mode="train"),
-            **data_config_token
+            normalise_labels=config_dict.get("normalise_preds", False),
+            **data_config_token,
         )
         # dev_dataset_token_labels = TSVClassificationDataset(
         #    mode=Split.dev,

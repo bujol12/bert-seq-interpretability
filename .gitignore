@@ -8,6 +8,8 @@ transformers/
 *.out
 data/
 glue_data/
+configs/final/**
+configs/final/**/
 *.tsv
 *.0
 *.log
