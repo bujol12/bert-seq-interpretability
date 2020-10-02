@@ -106,3 +106,8 @@ Possible entries of the configs are:
 `eval_results_filanamd` - save eval results to file
 
 
+# Acknowledgements
+
+Please note that some of this code is based on the token prediction tutorial for BERT using HuggingFace: https://github.com/huggingface/transformers/tree/master/examples/token-classification
+
+and Marek Rei's mltagger: https://github.com/marekrei/mltagger
