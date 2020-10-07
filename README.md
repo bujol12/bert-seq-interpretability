@@ -1,5 +1,21 @@
 # RoBERTa zero-shot interpretability paper
 
+## Data format
+
+The model supports standard tab seperated CoNLL format - one word per line, with tokens and labels being separated with a tab. There is a new line between sentences.
+
+For example (CoNLL2010 uncertainty detection):
+
+```
+We  C
+believe U
+that  C
+this  C
+server  C
+is  C
+useful  C
+```
+
 ## Run
 
 To run seq class training, please run: `python seq_class_script.py {config_path}
