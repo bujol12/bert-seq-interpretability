@@ -1,7 +1,6 @@
 models/
 *.ipynb
 
-*.txt
 mltagger/
 transformers/
 
